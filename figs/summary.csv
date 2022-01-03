@@ -1,0 +1,213 @@
+Scenario, Bench, Heap size, Direct Mem, # Threads, Final Size, Throughput, gc
+
+put-only-computeifpresent, OakMap, 12g, 20g, 01, 1.1487793E7, 0.10240184618997773
+put-only-computeifpresent, OakMap, 12g, 20g, 04, 1.4304912E7, 0.3576171852538444
+put-only-computeifpresent, OakMap, 12g, 20g, 08, 1.6658878333333334E7, 0.6931123957925075
+put-only-computeifpresent, OakMap, 12g, 20g, 12, 1.7365856E7, 0.8470630212620138
+
+put-only-computeifpresent, JavaSkipListMap, 32g, 20g, 01, 1.1052007333333334E7, 0.07068353916604474
+put-only-computeifpresent, JavaSkipListMap, 32g, 20g, 04, 1.3239429E7, 0.24982669031904484
+put-only-computeifpresent, JavaSkipListMap, 32g, 20g, 08, 1.4769011E7, 0.4139187236879365
+put-only-computeifpresent, JavaSkipListMap, 32g, 20g, 12, 1.5431916666666666E7, 0.47331856822308754
+
+put-only-computeifpresent, YoniList2, 12g, 20g, 01, 1.0995297E7, 0.06674581535960734
+put-only-computeifpresent, YoniList2, 12g, 20g, 04, 1.3451380333333334E7, 0.2693064641574687
+put-only-computeifpresent, YoniList2, 12g, 20g, 08, 1.4953286333333334E7, 0.4363426471102025
+put-only-computeifpresent, YoniList2, 12g, 20g, 12, 1.6098675333333334E7, 0.5864259505922323
+
+get-only, OakMap, 12g, 20g, 01, 1.0E7, 0.08814529729642641
+get-only, OakMap, 12g, 20g, 04, 1.0E7, 0.46730295299086766
+get-only, OakMap, 12g, 20g, 08, 1.0E7, 0.9283288813912671
+get-only, OakMap, 12g, 20g, 12, 1.0E7, 1.376437611189805
+
+get-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.09310617446899415
+get-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.4096734304640952
+get-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.81423429444795
+get-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 1.1863290851338404
+
+
+
+put-only, OakMap, 12g, 20g, 01, 1.1482977E7, 0.10209035873413086
+put-only, OakMap, 12g, 20g, 04, 1.4026644666666666E7, 0.32870748282186163
+put-only, OakMap, 12g, 20g, 08, 1.6523885666666666E7, 0.6720145972541176
+put-only, OakMap, 12g, 20g, 12, 1.7140735E7, 0.766221043916255
+
+put-only, JavaSkipListMap, 32g, 20g, 01, 1.1137608666666666E7, 0.07676888617372761
+put-only, JavaSkipListMap, 32g, 20g, 04, 1.3273492E7, 0.2522664646394382
+put-only, JavaSkipListMap, 32g, 20g, 08, 1.4265773666666666E7, 0.3535022623579507
+put-only, JavaSkipListMap, 32g, 20g, 12, 1.4991546333333334E7, 0.4289523342406844
+
+put-only, YoniList2, 12g, 20g, 01, 1.1181129333333334E7, 0.07992133948719495
+put-only, YoniList2, 12g, 20g, 04, 1.3283677666666666E7, 0.25309898844892453
+put-only, YoniList2, 12g, 20g, 08, 1.4693407666666666E7, 0.40510061369912975
+put-only, YoniList2, 12g, 20g, 12, 1.5989944E7, 0.5868594951109599
+
+zc-get-only, OakMap, 12g, 20g, 01, 1.0E7, 0.1693550904897397
+zc-get-only, OakMap, 12g, 20g, 04, 1.0E7, 0.7295468335056149
+zc-get-only, OakMap, 12g, 20g, 08, 1.0E7, 1.3939514505650379
+zc-get-only, OakMap, 12g, 20g, 12, 1.0E7, 1.9022686189609648
+
+zc-get-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.0824103807384825
+zc-get-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.41872119709657135
+zc-get-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.8112777544796691
+zc-get-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 1.2151103156593803
+
+zc-get-only, YoniList2, 12g, 20g, 01, 1.0E7, 0.08433212643484088
+zc-get-only, YoniList2, 12g, 20g, 04, 1.0E7, 0.3728479868933194
+zc-get-only, YoniList2, 12g, 20g, 08, 1.0E7, 0.698936837536987
+zc-get-only, YoniList2, 12g, 20g, 12, 1.0E7, 1.0390137190014197
+
+
+
+zc-ascend10-only, OakMap, 12g, 20g, 1, 1.0E7, 0.11420469317011266
+zc-ascend10-only, OakMap, 12g, 20g, 2, 1.0E7, 0.23337188578101778
+zc-ascend10-only, OakMap, 12g, 20g, 4, 1.0E7, 0.4365284126673994
+zc-ascend10-only, OakMap, 12g, 20g, 8, 1.0E7, 0.9276895889081848
+zc-ascend10-only, OakMap, 12g, 20g, 12, 1.0E7, 1.1733303345027348
+
+zc-ascend10-only, JavaSkipListMap, 32g, 20g, 1, 1.0E7, 0.07374362012541047
+zc-ascend10-only, JavaSkipListMap, 32g, 20g, 2, 1.0E7, 0.17690666516357004
+zc-ascend10-only, JavaSkipListMap, 32g, 20g, 4, 1.0E7, 0.3387933060464092
+zc-ascend10-only, JavaSkipListMap, 32g, 20g, 8, 1.0E7, 0.676226815939041
+zc-ascend10-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 1.0050772020711882
+
+zc-ascend10-only, YoniList2, 12g, 20g, 1, 1.0E7, 0.062223765701272415
+zc-ascend10-only, YoniList2, 12g, 20g, 2, 1.0E7, 0.16212827882272632
+zc-ascend10-only, YoniList2, 12g, 20g, 4, 1.0E7, 0.3083597033759224
+zc-ascend10-only, YoniList2, 12g, 20g, 8, 1.0E7, 0.5775328686753186
+zc-ascend10-only, YoniList2, 12g, 20g, 12, 1.0E7, 0.8653636082359305
+
+zc-descend-only, OakMap, 12g, 20g, 01, 1.0E7, 0.07848101411264671
+zc-descend-only, OakMap, 12g, 20g, 04, 1.0E7, 0.2117836258885407
+zc-descend-only, OakMap, 12g, 20g, 08, 1.0E7, 0.3279103165878166
+zc-descend-only, OakMap, 12g, 20g, 12, 1.0E7, 0.4350592602564258
+
+zc-descend-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.003833653778160601
+zc-descend-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.01638060613000648
+zc-descend-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.03130367034322872
+zc-descend-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.0441594690515734
+
+zc-descend-only, YoniList2, 12g, 20g, 01, 1.0E7, 0.0032508850097656247
+zc-descend-only, YoniList2, 12g, 20g, 04, 1.0E7, 0.012742260674750617
+zc-descend-only, YoniList2, 12g, 20g, 08, 1.0E7, 0.02514270478774189
+zc-descend-only, YoniList2, 12g, 20g, 12, 1.0E7, 0.036239706062221363
+
+
+ascend-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.03191547788500875
+ascend-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.15823131693448686
+ascend-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.31049762850689516
+ascend-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.45678569838696664
+
+
+
+descend-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.00397740426312244
+descend-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.01601732692555539
+descend-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.03146250023593686
+descend-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.04416984962879112
+
+
+
+zc-ascend-only, OakMap, 12g, 20g, 01, 1.0E7, 0.04500162344790996
+zc-ascend-only, OakMap, 12g, 20g, 04, 1.0E7, 0.2003344408919008
+zc-ascend-only, OakMap, 12g, 20g, 08, 1.0E7, 0.42935260714570206
+zc-ascend-only, OakMap, 12g, 20g, 12, 1.0E7, 0.5598378790356463
+
+zc-ascend-only, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.03532393624805177
+zc-ascend-only, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.16284662595122698
+zc-ascend-only, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.31277398884859076
+zc-ascend-only, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.40716738652546897
+
+zc-ascend-only, YoniList2, 12g, 20g, 01, 1.0E7, 0.037012890365541416
+zc-ascend-only, YoniList2, 12g, 20g, 04, 1.0E7, 0.15960655881667934
+zc-ascend-only, YoniList2, 12g, 20g, 08, 1.0E7, 0.31283221442624537
+zc-ascend-only, YoniList2, 12g, 20g, 12, 1.0E7, 0.4593381133572884
+
+ascend-only-aggregate, OakMap, 12g, 20g, 01, 1.0E7, 0.018851349268836626
+ascend-only-aggregate, OakMap, 12g, 20g, 04, 1.0E7, 0.06905331873975377
+ascend-only-aggregate, OakMap, 12g, 20g, 08, 1.0E7, 0.05200374655625206
+ascend-only-aggregate, OakMap, 12g, 20g, 12, 1.0E7, 0.04776313958148126
+
+ascend-only-aggregate, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.016059930318841415
+ascend-only-aggregate, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.053741910113955405
+ascend-only-aggregate, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.052389551728994975
+ascend-only-aggregate, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.04824703537609539
+
+ascend-only-aggregate, YoniList2, 12g, 20g, 01, 1.0E7, 0.023833241377639074
+ascend-only-aggregate, YoniList2, 12g, 20g, 04, 1.0E7, 0.08018780550400383
+ascend-only-aggregate, YoniList2, 12g, 20g, 08, 1.0E7, 0.052157714423128256
+ascend-only-aggregate, YoniList2, 12g, 20g, 12, 1.0E7, 0.04830284183440597
+
+
+
+
+zc-descend-only-entries, OakMap, 12g, 20g, 01, 1.0E7, 0.05116579965620158
+zc-descend-only-entries, OakMap, 12g, 20g, 04, 1.0E7, 0.14991926974712552
+zc-descend-only-entries, OakMap, 12g, 20g, 08, 1.0E7, 0.306300416781161
+zc-descend-only-entries, OakMap, 12g, 20g, 12, 1.0E7, 0.28085729267282256
+
+zc-descend-only-entries, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.0040271370328508575
+zc-descend-only-entries, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.016773098233556532
+zc-descend-only-entries, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.03240104810390233
+zc-descend-only-entries, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.045931386905465575
+
+zc-descend-only-entries, YoniList2, 12g, 20g, 01, 1.0E7, 7.184366614113396E-8
+zc-descend-only-entries, YoniList2, 12g, 20g, 04, 1.0E7, 2.470527479889801E-7
+zc-descend-only-entries, YoniList2, 12g, 20g, 08, 1.0E7, 4.881208089112066E-7
+zc-descend-only-entries, YoniList2, 12g, 20g, 12, 1.0E7, 5.050984301799273E-7
+
+zc-ascend-only-entries, OakMap, 12g, 20g, 01, 1.0E7, 0.04638131005372952
+zc-ascend-only-entries, OakMap, 12g, 20g, 04, 1.0E7, 0.1509742109107702
+zc-ascend-only-entries, OakMap, 12g, 20g, 08, 1.0E7, 0.24100401914191508
+zc-ascend-only-entries, OakMap, 12g, 20g, 12, 1.0E7, 0.3041524154468916
+
+zc-ascend-only-entries, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 0.03269541506432456
+zc-ascend-only-entries, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.16186313441176853
+zc-ascend-only-entries, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.32609272429119956
+zc-ascend-only-entries, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.4428468142190001
+
+zc-ascend-only-entries, YoniList2, 12g, 20g, 01, 1.0E7, 1.5608525491298884E-6
+zc-ascend-only-entries, YoniList2, 12g, 20g, 04, 1.0E7, 6.805186474692696E-6
+zc-ascend-only-entries, YoniList2, 12g, 20g, 08, 1.0E7, 1.326526006127073E-5
+zc-ascend-only-entries, YoniList2, 12g, 20g, 12, 1.0E7, 1.9443804269850205E-5
+
+
+
+zc-ascend-only-10k, OakMap, 12g, 20g, 01, 1.0E7, 0.0013622540873616262
+zc-ascend-only-10k, OakMap, 12g, 20g, 04, 1.0E7, 0.0038770210254754716
+zc-ascend-only-10k, OakMap, 12g, 20g, 08, 1.0E7, 0.0060615904214974875
+zc-ascend-only-10k, OakMap, 12g, 20g, 12, 1.0E7, 0.007717685431284805
+
+zc-ascend-only-10k, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 6.443041017364413E-4
+zc-ascend-only-10k, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.002851984838516191
+zc-ascend-only-10k, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.005646765410110936
+zc-ascend-only-10k, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.008321089292955735
+
+zc-ascend-only-10k-entries, OakMap, 12g, 20g, 01, 1.0E7, 8.11019809358496E-4
+zc-ascend-only-10k-entries, OakMap, 12g, 20g, 04, 1.0E7, 0.0023726537092479206
+zc-ascend-only-10k-entries, OakMap, 12g, 20g, 08, 1.0E7, 0.0034080419383862195
+zc-ascend-only-10k-entries, OakMap, 12g, 20g, 12, 1.0E7, 0.0038275861195084444
+
+zc-ascend-only-10k-entries, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 6.37632805239761E-4
+zc-ascend-only-10k-entries, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 0.002953247703679564
+zc-ascend-only-10k-entries, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 0.005925423099644246
+zc-ascend-only-10k-entries, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 0.00815926542415478
+
+zc-ascend-only-10k, YoniList2, 12g, 20g, 01, 1.0E7, 8.481698547116662E-4
+zc-ascend-only-10k, YoniList2, 12g, 20g, 04, 1.0E7, 0.0035444121942163494
+zc-ascend-only-10k, YoniList2, 12g, 20g, 08, 1.0E7, 0.006831418204336636
+zc-ascend-only-10k, YoniList2, 12g, 20g, 12, 1.0E7, 0.009400174887758827
+
+zc-descend-only-10k, OakMap, 12g, 20g, 01, 1.0E7, 8.886782800870612E-4
+zc-descend-only-10k, OakMap, 12g, 20g, 04, 1.0E7, 0.0025806693574103763
+zc-descend-only-10k, OakMap, 12g, 20g, 08, 1.0E7, 0.004021642331010171
+zc-descend-only-10k, OakMap, 12g, 20g, 12, 1.0E7, 0.0064140019050758475
+
+zc-descend-only-10k, JavaSkipListMap, 32g, 20g, 01, 1.0E7, 4.251552092343648E-5
+zc-descend-only-10k, JavaSkipListMap, 32g, 20g, 04, 1.0E7, 1.7141207970366835E-4
+zc-descend-only-10k, JavaSkipListMap, 32g, 20g, 08, 1.0E7, 3.3546420332082393E-4
+zc-descend-only-10k, JavaSkipListMap, 32g, 20g, 12, 1.0E7, 4.986068535063015E-4
+
+zc-descend-only-10k, YoniList2, 12g, 20g, 01, 1.0E7, 2.9327728056493174E-5
+zc-descend-only-10k, YoniList2, 12g, 20g, 04, 1.0E7, 1.40327281376044E-4
+zc-descend-only-10k, YoniList2, 12g, 20g, 08, 1.0E7, 2.671433269870669E-4
+zc-descend-only-10k, YoniList2, 12g, 20g, 12, 1.0E7, 4.0246265005270467E-4

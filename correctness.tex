@@ -1,0 +1,199 @@
+\label{sec:correctness}
+In this section, we prove Oak's correctness.
+Since the rebalancer is orthogonal to our contribution, we omit it from the discussion of Oak's correctness.
+We only assume that RB1-3 hold.
+We note that a similar rebalance was fully proven in~\cite{Braginsky-BTree}.
+
+\subsection{Preliminaries}
+
+We consider a shared memory system consisting of a collection of shared variables accessed by threads, which also have local variables.
+An \emph{algorithm} defines the behaviors of threads as deterministic state machines, where state transitions are associated with either an instance of a shared variable primitive (read, write, CAS, etc.) or a local step affecting the thread's local variables.
+A \emph{configuration} describes the current state of all local and shared variables. An \emph{initial configuration} is one where all variables  hold an initial value.
+A data structure implementation provides a set of operations, each with possible parameters. 
+We say that operations are \emph{invoked} and \emph{return} or \emph{respond}.
+The invocation of an operation leads to the execution of an algorithm by a thread.
+Both the invocation and the return are local steps of a thread.
+A \emph{run} of algorithm $\mathcal{A}$ is an alternating sequence of configurations and steps, beginning with some initial configuration, such that configuration transitions occur according to $\mathcal{A}$.
+We say that two operations are \emph{concurrent} in a run \emph{r} if both are invoked in \emph{r} before either returns.
+We use the notion of time \emph{t} during a run \emph{r} to refer to the configuration reached after the $t^{th}$ step in \emph{r}.
+An \emph{interval} of a run $r$ is a sub-sequence that starts
+with a step and ends with a configuration.
+The \emph{interval of an operation} $op$ starts with the invocation step of $op$ and ends with the configuration following the return from $op$ or the end of $r$, if there is no such return.
+
+An implementation of concurrent data structure is \emph{linearizable}~\cite{linearizability} (a correctness
+condition for concurrent objects) if it provides the illusion that each invoked operation takes effect instantaneously at some point, called the \emph{linearization point} (l.p.), inside its interval. 
+A \emph{linearization} of a run $r$ ($lin(r)$) is the sequential run constructed by serially executing each operation at its l.p.
+
+\subsection{Linearizability proof}
+
+\begin{definition}
+\label{def:associated}
+If there is an entry $e$ in Oak that points to key $k$ and handle $h$, (i.e., lookUp($k$) returns $e$ s.t. \newline $h=$ \texttt{handles[entries[e].hi]}) and $h\texttt{.deleted = false}$, we say that $h$ is \emph{associated with} $k$.
+\end{definition}
+
+\begin{claim}
+\label{claim:deleted}
+If an Oak operation searches for key $k$ and finds a non-deleted handle $h$ ($\algvar{h.deleted}=\algvar{false}$), then $h$ is associated with $k$.
+\end{claim}
+
+\begin{proof}
+If an operation searches for $k$ and finds $h$, then there is an entry $e$ that points to $k$, since Oak ensures that there is at most one entry that points to $k$, and $k$ is found only if there is such entry.
+This also means that $e$ points to handle $h$ (by handle index $hi$). 
+Assume that $e$ does not point to handle $h$, then the handle index is now $hi' \neq hi$.
+If $hi'=\bot$ then the handle index can be set only by a non-insertion operation using a CAS. According to Algorithm~\ref{alg:doIfPresent} this is only possible when $h$ in \algvar{handles[$hi$]} is already deleted, but $h$ is not deleted.
+Otherwise, $hi' \neq hi$ and $hi' \neq \bot$, then the handle index can be set only by an insertion operation using a CAS. According to Algorithm~\ref{alg:doput} this is only possible when $h$ in \algvar{handles[$hi$]} is already deleted, which is not the case.
+Therefore, there is an entry $e$ that points to $k$ and $h$ and $\algvar{h.deleted}=\algvar{false}$, so by Definition~\ref{def:associated} $h$ is associated with $k$.
+\end{proof}
+
+\begin{claim}
+\label{claim:remove}
+Assume handle $h$ is associated with key $k$ at time $t$ in a run $r$.
+Then, $h$ is associated with $k$ at time $(t+1)$ in $r$ if and only if the $(t+1)^{st}$ step in $r$ is not the l.p.\ of a successful remove($k$) operation.
+\end{claim}
+
+\begin{proof}
+Assume that $h$ is not associated with $k$ at time $(t+1)$.  
+
+If there is no handle associated with $k$ at time $t+1$, then by Definition~\ref{def:associated} either $h\texttt{.deleted = true}$ or the entry's handle index ($hi$) is $\bot$.
+In the first case, the only possible step that marks a handle as deleted is the l.p.\ of a successful remove($k$).
+In the second case, only non-insertion operations turn $hi$ to $\bot$ by using CAS (lines~\ref{line:doIfPresent cas} and \ref{line:finalizeRemove cas}), and according to Algorithm~\ref{alg:doIfPresent} this is only possible when the handle is deleted. 
+However, at time $t$, $h$ is still associated with $k$.
+Therefore, the entry's handle index ($hi$) is not $\bot$.
+
+Otherwise, there is a different handle $h' \neq h$ that is associated with $k$ at time $t+1$ ($h' \neq
+ \bot$).
+This change can only be done by an insertion operation using CAS (line~\ref{line:cashandle}). 
+According to Algorithm~\ref{alg:doput} an insertion operation reaches that CAS only if the handle ($h$) is already deleted (line~\ref{line:handle.deleted}). 
+However, at time $t$, $h$ is still associated with $k$, and so there is no different handle that is associated with $k$.
+
+Therefore, as long as the $(t+1)^{st}$ step is not the l.p.\ of a successful remove($k$), then $h$ is still associated with $k$ at time $t+1$ in $r$, and there is no handle associated with $k$ at time $t+1$ if the $(t+1)^{st}$ step is a l.p.\ of a successful remove($k$), as required.
+\end{proof}
+
+\begin{claim}
+\label{claim:insert}
+Assume no handle is associated with key $k$ at time $t$ in a run $r$.
+Then, no handle is associated with $k$ at time $t+1$ in $r$ if and only if the $(t+1)^{st}$ step in $r$ is not the l.p.\ of a successful insertion operation of $k$.
+\end{claim}
+
+
+\begin{proof}
+If no handle is associated at time $t$, and at time $t+1$ there is an associated handle, then according to Definition~\ref{def:associated} either a handle's deleted flag turned from false to true, or the entry's handle index turned from $\bot$ to a valid one.
+The former is not possible because the handles are initialized as not deleted and only become deleted by a remove; no operation turns a deleted handle to a non-deleted one. 
+In the second case, this can only be done by a successful insertion operation, at its l.p.\ (line~\ref{line:cashandle}), as required.
+\end{proof}
+ 
+
+Look at the linearization $lin(r)$ of run $r$ using l.p.s defined in Section~\ref{sec:lp}.
+From Claims~\ref{claim:remove} and \ref{claim:insert}, by induction on the steps of a run, we get:
+ 
+\begin{corollary}
+\label{corollary}
+At any point in a concurrent run $r$, the set of keys associated with handles is exactly the same as the set of inserted keys and not removed keys, associated with the same handles, in $lin(r)$ up to that point.
+\end{corollary}
+
+
+\begin{claim}[Get]
+In run $r$, if get($k$) returns $h$ then the corresponding get($k$) in $lin(r)$ returns $h$, and if get($k$) returns \texttt{null} then the corresponding get($k$) in $lin(r)$ returns \texttt{null}.
+\end{claim}
+
+\begin{proof}
+There are three cases for get's l.p.:
+\begin{enumerate}
+\item Get($k$) finds a non-deleted handle $h$ (line~\ref{line:get check deleted}), then get($k$) returns $h$ and by Claim~\ref{claim:deleted} $h$ is associated with $k$. 
+By Corollary~\ref{corollary}, in $lin(r)$ $k$ is inserted and not removed (the map holds $k$) and since this is the l.p.\ of get then the corresponding get($k$) in $lin(r)$ returns $h$ as well.
+\item LookUp($k$) by get($k$) (line~\ref{line:lookup}) returns $\bot$ or if get($k$) reads that the handle index is $\bot$ (line~\ref{line:get ei}), then there is no handle associated with key $k$, and get($k$) returns \texttt{null}.
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of get then the corresponding get($k$) in $lin(r)$ returns \texttt{null} as well.
+\item Get($k$) finds a deleted handle $h$ at time $t_2$ (line~\ref{line:get check deleted}) and returns \texttt{null}.
+Then its l.p.\ is the later between the read of handle index $hi$ by get($k$) at time $t_1 < t_2$ (line~\ref{line:get ei}) and immediately after the set of  $\algvar{deleted}=\algvar{true}$ by remove($k$) at some time $t < t_2$.
+Again there are two cases:
+\begin{enumerate}
+\item If $t > t_1$ then the l.p.\ is immediately after the set of  $\algvar{deleted}=\algvar{true}$ then there is no handle associated with key $k$, and by  Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and the corresponding get($k$) in $lin(r)$ returns \texttt{null} as well.
+\item If $t_1 > t$ then the l.p.\ is the read of handle index $hi$ by get($k$) (line~\ref{line:get ei}) at time $t_1$, after the set of $\algvar{deleted}=\algvar{true}$ at time $t$.
+We need to show that at no time between $t$ and $t_1$ the handle index changed to $hi' \neq hi$ and now it does not point to a deleted handle.
+Notice that only an insertion operation l.p.\ can change $hi$ to $hi'$.
+Assume by contradiction that the l.p.\ of such an operation occurs between $t$ and $t_1$.
+Then when get sees $hi$ at time $t_1$, it is already $hi'$ and not $hi$. A contradiction.
+Hence, at the l.p.\ of get($k$), there is no handle associated with key $k$, and by Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, so the corresponding get($k$) in $lin(r)$ returns \texttt{null} as required.
+\end{enumerate}
+\end{enumerate}
+\end{proof}
+
+
+\begin{claim}[PutIfAbsent]
+In run $r$, if putIfAbsent($k$) returns \texttt{true} then the corresponding putIfAbsent($k$) in $lin(r)$ returns \texttt{true}, and if putIfAbsent($k$) returns \texttt{false} then in $lin(r)$ the corresponding putIfAbsent($k$) returns \texttt{false}.
+\end{claim}
+
+\begin{proof}
+If putIfAbsent($k$) finds a non-deleted handle $h$ (line~\ref{line:handle.deleted}), then putIfAbsent($k$) returns \texttt{false} and by Claim~\ref{claim:deleted} $h$ is associated with $k$. 
+By Corollary~\ref{corollary}, in $lin(r)$ $k$ is inserted and not removed (the map holds $k$) and since this is the l.p.\ of putIfAbsent then the corresponding putIfAbsent($k$) in $lin(r)$ returns \texttt{false} as well.
+
+Otherwise, if putIfAbsent($k$) performs a successful CAS of handle index from $\bot$ (line~\ref{line:cashandle}), then putIfAbsent($k$) returns \texttt{true} and by Definition~\ref{def:associated} there was no handle associated with $k$ just before the CAS. 
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of putIfAbsent then the corresponding putIfAbsent($k$) in $lin(r)$ returns \texttt{true} as required.
+\end{proof}
+
+\begin{claim}[ComputeIfPresent]
+In run $r$, if computeIfPresent($k$) returns \texttt{true} then in $lin(r)$ the corresponding \newline computeIfPresent($k$) returns \texttt{true}, and if computeIfPresent($k$) returns \texttt{false} then the corresponding computeIfPresent($k$) in $lin(r)$ returns \texttt{false}.
+\end{claim}
+
+\begin{proof}
+If computeIfPresent($k$) finds a non-deleted handle $h$ and there is a successful nested call to handle compute (line~\ref{line:doIfPresent handle compute return true}), then computeIfPresent($k$) returns \texttt{true} and by Claim~\ref{claim:deleted} $h$ is associated with $k$. 
+By Corollary~\ref{corollary}, in $lin(r)$ $k$ is inserted and not removed (the map holds $k$) and since this is the l.p.\ of computeIfPresent then the corresponding computeIfPresent($k$) in $lin(r)$ returns \texttt{true} as well.
+
+If lookUp($k$) by computeIfPresent($k$) returns $\bot$, or if \newline computeIfPresent($k$) reads that the handle index is $\bot$ (line~\ref{line:doIfPresent hi is bot}), then there is no handle associated with key $k$, and \newline computeIfPresent($k$) returns \texttt{false}.
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of computeIfPresent then the corresponding computeIfPresent($k$) in $lin(r)$ returns \texttt{false} as required.
+
+Otherwise, a successful CAS of handle index to $\bot$ is performed by computeIfPresent($k$) (line~\ref{line:doIfPresent cas}), from a handle index pointing to a deleted handle (line~\ref{line:doIfPresent reads deleted}).
+Then computeIfPresent($k$) returns \texttt{false} and by Definition~\ref{def:associated} there is no handle associated with $k$ just before the CAS and right after it. 
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of computeIfPresent then the corresponding computeIfPresent($k$) in $lin(r)$ returns \texttt{false}.
+\end{proof}
+
+\begin{claim}[Put]
+In run $r$, if put($k$) inserts $k$ and returns then in $lin(r)$ the corresponding put($k$) inserts $k$ and returns, and if put($k$) replaces $k$'s value and returns then in $lin(r)$ the corresponding put($k$) replaces $k$'s value and returns.
+\end{claim}
+
+\begin{proof}
+If put($k$) finds a non-deleted handle $h$ and there is a successful nested call to handle put (line~\ref{line:handleput}), then put($k$) replaces $k$'s value and returns, and by Claim~\ref{claim:deleted} $h$ is associated with $k$. 
+By Corollary~\ref{corollary}, in $lin(r)$ the map holds $k$ and since this is the l.p.\ of put then the corresponding put($k$) in $lin(r)$ replaces $k$'s value and returns as well.
+
+Otherwise, put($k$) performs a successful CAS of handle index (line~\ref{line:cashandle}) from $\bot$, and inserts $k$ and returns. By Definition~\ref{def:associated} there is no handle associated with $k$ just before the CAS, and there is one right after the CAS (the handle is initialized as non-deleted).
+Since this is the l.p.\ of put, and by Corollary~\ref{corollary} in $lin(r)$ the map does not hold $k$ before the l.p.\ and does after.
+Therefore, the corresponding put($k$) in $lin(r)$ inserts $k$ and returns as required.
+\end{proof}
+
+\begin{claim}[PutIfAbsentComputeIfPresent]
+In run $r$, if \newline putIfAbsentComputeIfPresent($k$) inserts $k$ and returns then in $lin(r)$ the corresponding putIfAbsentComputeIfPresent($k$) inserts $k$ and returns, and if putIfAbsentComputeIfPresent($k$) updates $k$'s value and returns then in $lin(r)$ the corresponding putIfAbsentComputeIfPresent($k$) updates $k$'s value and returns.
+\end{claim}
+
+\begin{proof}
+If putIfAbsentComputeIfPresent($k$) performs a successful CAS of handle index (line~\ref{line:cashandle}) from $\bot$, then it inserts $k$ and returns.
+By Definition~\ref{def:associated} there is no handle associated with $k$ just before the CAS, and there is one right after the CAS (the handle is initialized as non-deleted).
+Since this is the l.p.\ of putIfAbsentComputeIfPresent, and by Corollary~\ref{corollary} in $lin(r)$ the map does not hold $k$ before the l.p.\ and does after.
+Therefore, the corresponding putIfAbsentComputeIfPresent($k$) in $lin(r)$ inserts $k$ and returns as required.
+
+Otherwise, putIfAbsentComputeIfPresent($k$) finds a non-deleted handle $h$ and there is a successful nested call to handle compute (line~\ref{line:handlecompute}), then putIfAbsentComputeIfPresent($k$) updates $k$'s value and returns, and by Claim~\ref{claim:deleted} $h$ is associated with $k$.
+By Corollary~\ref{corollary}, in $lin(r)$ the map holds $k$ and since this is the l.p.\ of putIfAbsentComputeIfPresent then the corresponding putIfAbsentComputeIfPresent($k$) in $lin(r)$ updates $k$'s value and returns as well.
+\end{proof}
+
+\begin{claim}[Remove]
+In run $r$, if remove($k$) removes $k$ and returns then in $lin(r)$ the corresponding remove($k$) removes $k$ and returns, and if remove($k$) returns unsuccessfully (without removing any key) then in $lin(r)$ the corresponding remove($k$) returns unsuccessfully.
+\end{claim}
+
+\begin{proof}
+If remove($k$) finds a non-deleted handle $h$ and a successful nested call to handle remove occurs, setting the handle to deleted (line~\ref{line:doIfPresent handle remove}), then remove($k$) removes $k$ and returns.
+By Claim~\ref{claim:deleted} $h$ is associated with $k$ before and there is no handle associated with $k$ right after (by Definition~\ref{def:associated}).
+Since this is the l.p.\ of remove, and by Corollary~\ref{corollary} in $lin(r)$ the map does hold $k$ before the l.p.\ and does not after.
+Therefore, the corresponding remove($k$) in $lin(r)$ removes $k$ and returns as required.
+
+If lookUp($k$) by remove($k$) returns $\bot$, or if remove($k$) reads that the handle index is $\bot$ (line~\ref{line:doIfPresent hi is bot}), then there is no handle associated with key $k$, and remove($k$) returns unsuccessfully.
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of remove then the corresponding remove($k$) in $lin(r)$ returns unsuccessfully as required.
+
+Otherwise, a successful CAS of handle index to $\bot$ is performed by remove($k$) (line~\ref{line:doIfPresent cas}), from a handle index pointing to a deleted handle (line~\ref{line:doIfPresent reads deleted}).
+Then remove($k$) returns and by Definition~\ref{def:associated} there is no handle associated with $k$ just before the CAS and right after it. 
+By Corollary~\ref{corollary}, in $lin(r)$ the map does not hold $k$, and since this is the l.p.\ of remove then the corresponding remove($k$) in $lin(r)$ returns unsuccessfully.
+\end{proof}
+
+Having shown that all of \oak's operations behave the same way in a run $r$ and its linearization $lin(r)$, we can conclude the following theorem:
+
+\begin{theorem}
+Oak is linearizable with the l.p.s defined in Section~\ref{sec:lp}.
+\end{theorem}

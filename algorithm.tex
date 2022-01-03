@@ -1,0 +1,478 @@
+
+\setlength{\textfloatsep}{0.75\baselineskip}
+
+We now describe the \oak\ algorithm. The ZC  and  legacy  API implementations share the most of it. 
+We focus here on the ZC variant; supporting also the legacy API mainly entails serialization and deserialization.
+
+%\oak\ uses chunk objects that support rebalancing; 
+We begin in \Cref{ssec:chunks} with an overview  of  chunk objects.  We then proceed to describe  \oak's operations.
+In \Cref{ssec:queries} 
+we discuss Oak's queries, namely \algvar{get} and scan.
+%Oak's support for various conditional and unconditional updates raises some subtle interactions that need to be handled with care. 
+We divide our discussion of update operations into two types: insertion operations that may add a new value to Oak are discussed in 
+\Cref{ssec:doput}, whereas operations that only take actions  when the affected key is already in Oak are given in 
+\Cref{ssec:doIfPresent}.
+%given in Algorithm~\ref{alg:doput}, whereas \algvar{remove} and \algvar{computeIfPresent}, which only take actions  when the affected key is in Oak, are given in Algorithm~\ref{alg:doIfPresent}.
+To argue that Oak is correct, we identify  in \Cref{sec:lp} \emph{linearization points} for all operations, so that concurrent operations appear to execute in the order of their linearization points. 
+A formal correctness proof is given in the supplementary material. 
+
+%The algorithm makes use of commodity atomic hardware operations like CAS and F\&A.
+
+\subsection{Chunk objects}
+\label{ssec:chunks}
+
+
+A chunk object exposes methods for searching, allocating, and writing, as we describe in this section.
+In addition, the chunk object has a  \emph{rebalance} method, which splits chunks when they are over-utilized, merges chunks when they are under-used, and reorganizes chunks' internals. 
+Our rebalance is implemented as in previous   constructions \cite{kiwi,Braginsky-BTree}.
+Since it is not novel and orthogonal to our contributions, we do not detail it, but rather outline its guarantees.
+Implementing the remaining chunk methods is straightforward.
+
+When a new chunk is created (by rebalance), some prefix of the entries array is filled with data, and the suffix consists of empty entries for future allocation. 
+The full prefix is  sorted, that is, the linked list successor of each entry is the ensuing entry in the array. The sorted prefix can be searched efficiently using binary search. 
+When a new entry is inserted, it is stored in the first free cell and connected via a bypass in the sorted linked list. If insertion order is random, inserted entries are most likely to be distributed evenly between the ordered prefix entries, keeping the search time low. %, thus creating fairly short bypasses. 
+
+\paragraph{Rebalance guarantees.}
+The rebalancer preserves the integrity of the chunks  list in the following sense: Consider a 
+\algvar{locateChunk}($k0$) operation that returns $C_0$ at some time $t_0$ in a run, 
+and a traversal of the linked list using {next} pointers from $C_0$ reaching a chunk whose range 
+ends with $k1$ at time $t_1$. For each traversed chunk $C$, choose an arbitrary time $t_0 \le t_C \le t_1$ and 
+consider the sequence of keys stored in $C$ at time $t_C$. 
+Let $T$ be the concatenation of these sequences. 
+Then:
+\begin{description}
+    \item[RB1] $T$ includes every key $k \in [k0,k1]$ that is inserted before time $t_0$ 
+		and is not removed before time $t_1$; 
+    \item[RB2] $T$ does not include any key that is either not inserted before time $t_1$ or is 
+		removed before time $t_0$ and not re-inserted before time $t_1$; and 
+    \item[RB3]   $T$ is sorted  in monotonically increasing order.
+\end{description}
+
+\paragraph{Chunk methods.}
+
+
+
+ %\algvar{lookUp}, \algvar{allocateEntryAndKey, allocateHandle, entriesLLputIfAbsent, writeValue, publish}, and \algvar{unpublish}.
+% We now describe their operation; their implementation is straightforward (except for rebalancing) and so we omit it from the pseudo-code. 
+The chunk's 
+\algvar{LookUp(k)} method searches for an entry corresponding to  key \algvar{k}. 
+This is done by first running a binary search on the entries array prefix and continuing the search by traversing the entries linked list. 
+Note that \oak\ ensures that there is at most one relevant entry.
+
+We rely on three allocation methods:
+\algvar{allocateHandle} allocates a new handle;  
+\algvar{allocateEntryAndKey} allocates a new entry and also allocates and writes the given key that it points to (off-heap); and
+\algvar{writeValue} allocates space for the value (outside the chunk), writes the value to it, and links the handle to the value.
+Allocations use atomic hardware operations like F\&A, so that the same space is not allocated twice.
+%
+%A new entry can be  added to the entries linked list by 
+\algvar{entriesLLputIfAbsent} adds an entry to the linked list; it uses CAS in order 
+to preserve the invariant of a key not appearing more than once.
+If it encounters an  entry with the same key, then it returns the encountered entry.
+
+In-chunk allocations (of handles and entries) may trigger a rebalance ``under the hood''. 
+In this case, the allocate procedure fails returning $\bot$ and Oak retries the update. 
+While a chunk is being rebalanced, calls to \algvar{entriesLLputIfAbsent} fail and return $\bot$.
+
+Update operations inform the rebalancer of the action they are about to perform on the chunk by calling the \algvar{publish} method.
+This method, too, fails in case the chunk is being rebalanced. 
+In principle,  rebalance may help published operations complete (for lock-freedom), but for simplicity, our description 
+herein assumes that it does not. Hence, we always retry an operation upon failure.
+When the update operation has finished its published action, it calls \algvar{unpublish}. 
+%We implement the publish and unpublish methods as in KiWi~\cite{kiwi}. 
+
+Whereas chunk update methods that encounter a rebalance fail (return $\bot$),  methods that do not modify the entries list proceed concurrently with rebalance without aborting.
+This includes \algvar{lookUp}, \algvar{writeValue}, and \algvar{unpublish}.  
+
+% 
+
+
+\subsection{Queries -- get and scans} 
+\label{ssec:queries}
+
+
+%\paragraph{Get.}
+The \algvar{get} operation is given in \Cref{alg:get}. 
+It returns a read-only view (\algvar{oakRBuffer}) of the handle that holds the value that is mapped to the given key. %, in accordance with our zero-copy policy.
+Since it is only a view and not a copy of the value, if the value is then updated by a different operation, the view will refer to the updated value. 
+%The returned view cannot be used for updating the value since it is a read-only view.
+%Consistency is achieved by making sure that ByteBuffer operations performed on the oakBuffer are thread-safe, for example, we can use a read-write lock in the handle for concurrency control. 
+Furthermore, a concurrent operation can remove the key from Oak, in which case the handle will be marked as deleted;  reads from the \algvar{oakRBuffer}  check this  flag
+and throw an exception in case the value is deleted. 
+
+
+
+\begin{algorithm}[tb]
+\small
+\caption{Get}
+\label{alg:get}
+\begin{algorithmic}[1]
+\Procedure{get}{\key}
+\State \algvar{C}, \algvar{ei}, \algvar{hi}, \algvar{handle} $\assign \bot$
+\State \algvar{C} $\assign$ locateChunk(\key)  \label{line:locate chunk}; 
+%\State 
+\algvar{ei} $\assign$ \algvar{C}.lookUp(\key) \label{line:lookup}
+\If {$\algvar{ei} \neq \bot$}  $\algvar{hi} \assign$ \algvar{C.entries[ei].hi}
+\EndIf \label{line:get ei}
+\If {$\algvar{hi} \neq \bot$} $\algvar{handle} \assign $\algvar{C.handles[hi]}
+\EndIf \label{line:get hi}
+\If {$\algvar{handle} = \bot \ \lor \ \algvar{handle.deleted} $} \Return \NULL \label{line:get check deleted}
+\Else \ \Return new OakRBuffer(\algvar{handle})
+\EndIf
+\EndProcedure
+\algstore{getHandle}
+\end{algorithmic}
+\end{algorithm}
+
+The algorithm first locates the relevant chunk and calls lookUp (line~\ref{line:lookup}) to search for an entry with the given key.
+Then, it finds the handle and checks if it is deleted. % (line~\ref{line:get check deleted}).
+If an entry holding a valid and non-deleted handle is found, it creates a new \algvar{oakRBuffer} that points to the handle and returns it. Otherwise, \algvar{get} returns \textsc{null}.
+
+%\paragraph{Scan.}
+The ascending scan begins by locating the first chunk with a relevant key in the scanned range using \algvar{locateChunk}. 
+It then traverses the entries within each relevant chunk using the intra-chunk entries linked list, and continues to the next chunk in the chunks linked list. 
+The iterator returns an entry it encounters only if its handle index is not $\bot$ and the handle is not deleted. Otherwise, it continues to the next entry.
+
+The descending iterator begins by locating the \emph{last} relevant chunk.
+Within each relevant chunk, it first locates the last relevant entry in the sorted prefix, and then 
+scans the (ascending) linked list from that entry until the last relevant entry in the chunk, while saving the entries it traverses in a stack.
+After returning the last entry, it pops and returns the stacked entries.  
+Upon exhausting the stack and reaching an entry in the sorted prefix, the iterator simply proceeds to the previous prefix entry (one cell back in the array) and rebuilds the stack with the linked list entries in the next bypass. 
+
+
+\begin{figure}[tb]
+\centering
+\includegraphics[scale=0.4]{../figures/descend_entries.png}
+\hspace{5mm}
+\includegraphics[scale=0.4]{../figures/descend_stacks.png}
+\caption{Example entries linked list (left) and stacks built during its traversal by a descending scan (right).}
+\label{fig:descend}
+\end{figure}
+
+\Cref{fig:descend} shows an example of an entries linked list and the stacks constructed during its traversal.
+In this example, the ordered prefix ends with~9, which does not have a next entry, so we  can return it.
+Next, we move one entry back in the prefix, to entry~6, and traverse the linked list until returning to an already seen entry within the prefix (9~in this case), 
+while creating the stack 8~$\rightarrow{}$~7~$\rightarrow{}$~6. 
+We then pop and return each stack entry.
+Now, when the stack is empty, we again go one entry back in the prefix and traverse the linked list. Since after~5 we reach~6, which is also in the prefix, we can return~5. 
+Finally, we reach~2 and create the stack with entries 4~$\rightarrow{}$~3 $\rightarrow{}$~2, which we pop and return. 
+When exhausting a chunk, the descending  scan queries the index again, but now for a the chunk with the greatest minKey that is strictly smaller than the current chunk's minKey.
+%From the chunk returned by the index, we again traverse the chunks linked list until the last chunk with a smaller minKey than the last key the iterator returned.
+
+
+\newenvironment{enum}%
+  {\begin{enumerate}%
+      \setlength{\partopsep}{0pt}%
+      \setlength{\topsep}{0pt}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0pt}}%
+  {\end{enumerate}}
+
+%\paragraph{Iterator correctness.}
+By RB1-3 it is easy to see that the scan algorithm described above guarantees the following:
+\begin{enumerate} 
+    \item A scan returns all relevant keys that were inserted to Oak before the start of the scan and not removed until its end.
+    \item A scan does not return keys that were never present or were removed from Oak before the start of the scan and not inserted until it ends.
+    \item A scans does not return the same key more than once.
+\end{enumerate}
+
+Note that relevant keys inserted or removed concurrently with a scan may be either included or excluded.
+
+\subsection{Insertion operations} 
+\label{ssec:doput}
+
+The three insertion operations --  \algvar{put, putIfAbsent}, and  \algvar{putIfAbsentComputeIfPresent} -- use  the \algvar{doPut} function in \Cref{alg:doput}.
+\algvar{DoPut} first locates the relevant chunk and searches for an entry. We then distinguish between two cases: if a non-deleted handle is found (case 1: lines~\ref{line:handle.deleted}~--~\ref{line:doput end case 1}) then we say that the key is \emph{present}.
+In this case, \algvar{putIfAbsent} returns \texttt{false} (line~\ref{line:putIf returns false}), \algvar{put} calls handle.put (line~\ref{line:handleput}) to associate the new value with the key, and \algvar{putIfAbsentComputeIfPresent}  calls handle.compute (line \ref{line:handlecompute}). 
+The  handle operations return \texttt{false} if the handle is deleted (due to a concurrent remove), in which case we retry (line~\ref{line:doputretry}).
+
+
+
+\remove{ 
+try to associate the given key with  a new value 
+%if it is not already associated with a value.
+\algvar{putIfAbsent} returns \texttt{true} in this case.
+In case the key is present, \algvar{putIfAbsent} returns \texttt{false}, \algvar{put}  associates the new value with the key, and \algvar{putIfAbsentComputeIfPresent} 
+computes a new value to be associated with the key. 
+}
+
+
+\begin{algorithm}[htb]
+\setlength\belowcaptionskip{0pt}
+\setlength\abovecaptionskip{0pt}
+\small
+\caption{Oak's insertion operations}
+\label{alg:doput}
+\begin{algorithmic}
+\algrestore{getHandle}
+\Procedure{put\textnormal{(\key,\ \givenvalue)}}{}
+\State doPut(\key,\ \givenvalue,\ $\bot$,\ \textsc{put})
+\State \Return 
+\EndProcedure
+
+\Procedure{putIfAbsent}{\key,\ \givenvalue}
+\State \Return doPut(\key,\ \givenvalue,\ $\bot$,\ \textsc{putIf})
+\EndProcedure
+
+
+\Procedure{putIfAbsentComputeIfPresent}{\key,\ \givenvalue,\ \algvar{func}}
+\State doPut(\key,\ \givenvalue,\ \algvar{func},\ \textsc{compute})
+\State \Return 
+\EndProcedure
+\Statex
+\Procedure{doPut}{\key,\ \givenvalue,\ \algvar{func},\ \algvar{operation}}
+\State \algvar{C}, \algvar{ei}, \algvar{hi}, \algvar{newHi}, \algvar{handle} $\assign \bot$; \algvar{result}, \algvar{succ} $\assign$ true
+\State \algvar{C} $\assign$ locateChunk(\key); 
+%\State 
+\algvar{ei} $\assign$ \algvar{C}.lookUp(\key)
+\If {$\algvar{ei} \neq \bot$}  $\algvar{hi} \assign$ \algvar{C.entries[ei].hi}
+\EndIf
+\If {$\algvar{hi} \neq \bot$} $\algvar{handle} \assign $\algvar{C.handles[hi]}
+\EndIf
+\If {$\algvar{handle} \neq \bot \ \land \ \neg\algvar{handle.deleted}$} 
+\LeftComment{Case 1: key is present}
+ \label{line:handle.deleted}
+\If {$\algvar{operation} = \textsc{putIf}$} \Return false \label{line:putIf returns false}
+\EndIf
+\If {$\algvar{operation} = \textsc{put}$} \algvar{succ} $\assign$ \algvar{handle}.put(\givenvalue) \label{line:handleput}
+\EndIf
+\If {$\algvar{operation} = \textsc{compute}$} 
+\State \algvar{succ} $\assign$ \algvar{handle}.compute(\algvar{func}) \label{line:handlecompute}
+\EndIf
+\If {$\neg\algvar{succ}$} 
+\State \Return doPut(\key,\ \givenvalue,\ \algvar{func},\ \algvar{operation}) \label{line:doputretry}
+\EndIf
+\State \Return true \label{line:doput end case 1}
+\EndIf
+\LeftComment{Case 2: key is absent}
+\If {$\algvar{ei} = \bot$}
+\State \algvar{ei} $\assign$ \algvar{C}.allocateEntryAndKey(\key) \label{line:allocateentry}
+\State $\algvar{ei} \assign $\algvar{C}.entriesLLputIfAbsent(\algvar{ei}) \label{line:linkentry}
+\EndIf
+\State $\algvar{newHi} \assign $\algvar{C}.allocateHandle() \label{line:allocatehandle}
+\If {$\algvar{ei} = \bot \lor \algvar{newHi} = \bot$} \label{line:nospace} 
+\Comment{allocation or insertion failed}
+\State
+\Return doPut(\key,\ \givenvalue,\ \algvar{func},\ \algvar{operation})
+
+\EndIf 
+\State \algvar{C}.writeValue(\algvar{newHi},\ \givenvalue) \label{line:writevalue}
+\If {$\neg$\algvar{C}.publish(\algvar{ei},\ \algvar{hi},\ \algvar{newHi},\ \algvar{func},\ \algvar{operation})} 
+\State \Return doPut(\key,\ \givenvalue,\ \algvar{func},\ \algvar{operation})
+\EndIf \label{line:publish}
+\State \algvar{result} $\assign$ CAS(\algvar{C}.\algvar{entries[ei].hi}, \algvar{hi}, \algvar{newHi}) \label{line:cashandle}
+\State \algvar{C}.unpublish(\algvar{ei},\ \algvar{hi},\ \algvar{newHi},\ \algvar{func},\ \algvar{operation}) \label{line:unpublish}
+\If {$\neg\algvar{result}$} \label{line:retryaftercas} 
+\State \Return doPut(\key,\ \givenvalue,\ \algvar{func},\ \algvar{operation}) \label{line:doputretryatend}
+\EndIf
+\State \Return true \label{line:doput return}
+\EndProcedure
+\algstore{doPut}
+\end{algorithmic}
+\end{algorithm}
+
+
+
+In the second case, the key is absent.
+If we discover a removed entry that points to the same key but with $\algvar{hi} = \bot$ or a deleted handle, then we reuse this entry. 
+Otherwise, we call \algvar{allocateEntryAndKey} to allocate a new entry as well as allocate and write the key that it points to (line~\ref{line:allocateentry}), and 
+then  try to link this new entry into the entries linked list  (line \ref{line:linkentry}).
+Either way, we allocate a new handle (line~\ref{line:allocatehandle}).
+These functions might fail and cause a retry (line~\ref{line:nospace}).
+
+If \algvar{entriesLLputIfAbsent} receives $\bot$ as a parameter (because the allocation in line~\ref{line:allocateentry} fails) then it just returns $\bot$ as well. 
+Otherwise, if it encounters an already linked entry then it returns it.
+In this case, the entry allocated in line~\ref{line:allocateentry} remains unlinked in the entries array and other operations never reach it; the rebalancer eventually removes it from the array.
+After allocations of the entry, key, and handle, we allocate and write the value (outside the chunk), and have the new handle point to it (line \ref{line:writevalue}).
+
+We complete the insertion by using CAS to make the entry point to the new handle index (line~\ref{line:cashandle}). 
+Before doing so, we publish the operation (as explained in \cref{ssec:chunks}), 
+which can also lead to a retry (line \ref{line:publish}).
+After the CAS, we unpublish the operation, as it is no longer pending (line~\ref{line:unpublish}). 
+If CAS fails, we retry the operation (line~\ref{line:doputretryatend}). 
+
+To see why we retry, observe that the CAS may fail because of a concurrent non-insertion operation that sets the handle index to $\bot$ or because of a concurrent insertion operation that sets the handle index to a different value.
+In the latter case, we cannot order (linearize) the current operation before the concurrent insertion, because the concurrent insertion operation might be a \algvar{putIfAbsent}, and would have returned \texttt{false} had the current operation preceded it.
+
+\begin{algorithm*}[htb]
+\small
+\setlength\multicolsep{0pt}
+\caption{Oak's non-insertion update operations}
+\label{alg:doIfPresent}
+\begin{algorithmic}[1]
+\algrestore{doPut}
+\begin{multicols}{2}
+\Procedure{doIfPresent}{\key,\ \algvar{func},\ \algvar{op}}
+\State \algvar{C}, \algvar{ei}, \algvar{hi}, \algvar{handle} $\assign \bot$; \algvar{res} $\assign$ true
+\State \algvar{C} $\assign$ locateChunk(\key);  
+%\State 
+\algvar{ei} $\assign$ \algvar{C}.lookUp(\key)
+\If {$\algvar{ei} \neq \bot$}  $\algvar{hi} \assign$ \algvar{C.entries[ei].hi}
+\EndIf
+\If {$\algvar{hi} = \bot$} \Return false
+\EndIf \label{line:doIfPresent hi is bot}
+\State $\algvar{handle} \assign $\algvar{C.handles[hi]}
+\If {$\neg\algvar{handle.deleted}$} \LeftComment{Case 1: handle exists and not deleted} \label{line:doIfPresent reads deleted}
+\If {\algvar{op} = \textsc{comp}  $\land$ \algvar{handle}.compute(func)}  \label{line:doIfPresent handle compute return true}
+\State \Return true
+\EndIf
+\If {\algvar{op} = \textsc{rm} $\land$  \algvar{handle}.remove()} \label{line:doIfPresent handle remove}
+\State \Return finalizeRemove(\algvar{handle})
+\EndIf
+\EndIf
+\LeftComment{Case 2: handle is deleted -- ensure key is removed}
+\If {$\neg$\algvar{C}.publish(\algvar{ei},\ \algvar{hi},\ $\bot$,\ \algvar{func},\ \algvar{op})} 
+\State \Return doIfPresent(\key,\ \algvar{func},\ \algvar{op})
+\EndIf \label{line:doIfPresent publish}
+\State \algvar{res} $\assign$ CAS(\algvar{C}.\algvar{entries[ei].hi}, \algvar{hi}, $\bot$) \label{line:doIfPresent cas}
+\State \algvar{C}.unpublish(\algvar{ei},\ \algvar{hi},\ $\bot$,\ \algvar{func},\ \algvar{op})
+\If {$\neg\algvar{res}$} 
+\Return doIfPresent(\key,\ \algvar{func},\ \algvar{op}) \label{line:doIfPresent retry}
+\EndIf
+\State \Return false \label{line:doIfPresent final return false}
+\EndProcedure
+
+%\columnbreak
+
+\Procedure{computeIfPresent}{\key,\ \algvar{func}}
+\State \Return doIfPresent(\key,\ \algvar{func},\ \textsc{comp})
+\EndProcedure
+\Statex
+\Procedure{remove}{\key}
+\State doIfPresent(\key,\ $\bot$,\ \textsc{rm})
+\State \Return 
+\EndProcedure
+\Statex
+\Procedure{finalizeRemove}{\algvar{prev}}
+\State \algvar{C}, \algvar{ei}, \algvar{hi}, \algvar{handle} $\assign \bot$
+\State \algvar{C} $\assign$ locateChunk(\key);  
+%\State 
+\algvar{ei} $\assign$ \algvar{C}.lookUp(\key)
+\If {$\algvar{ei} \neq \bot$}  $\algvar{hi} \assign$ \algvar{C.entries[ei].hi}
+\EndIf
+\If {$\algvar{hi} = \bot$} \Return true
+\EndIf 
+\State $\algvar{handle} \assign $\algvar{C.handles[hi]}
+\If {$\algvar{handle} \neq \algvar{prev}$} \Return true 
+\label{line:finalizeRemove prev neq handle}
+\EndIf
+\If {$\neg$\algvar{C}.publish(\algvar{ei}, \algvar{hi}, $\bot$, $\bot$, \textsc{rm})} 
+\State \Return finalizeRemove(\algvar{prev})
+\EndIf
+\State CAS(\algvar{C}.\algvar{entries[ei].hi}, \algvar{hi}, $\bot$) \label{line:finalizeRemove cas}
+\State \algvar{C}.unpublish(\algvar{ei},\ \algvar{hi},\ $\bot$,\ $\bot$,\ \textsc{rm})
+\State \Return true
+\EndProcedure
+\end{multicols}
+\end{algorithmic}
+\end{algorithm*}
+
+
+\subsection{Non-insertion operations} 
+\label{ssec:doIfPresent}
+
+The non-removing updates,  \algvar{computeIfPresent} and \algvar{remove},  
+%do not insert new entries. Both 
+use the \algvar{doIfPresent} function   in \Cref{alg:doIfPresent}. 
+It first locates the handle, and if there is none,  returns \texttt{false} (line~\ref{line:doIfPresent hi is bot}).
+
+In  \algvar{computeIfPresent}, if the handle exists and is not deleted (case 1), we run  handle.compute and return \texttt{true} if it is successful (line~\ref{line:doIfPresent handle compute return true}).
+Otherwise (case 2), a subtle race may arise: it is possible for another operation to insert the key after we observe it as deleted and before this point. 
+In this case, to ensure correctness, \algvar{computeIfPresent} must assure that the key is in fact removed. 
+To this end, it performs a CAS to change handle index to $\bot$ (line~\ref{line:doIfPresent cas}).
+Since this affects the chunk's entries, we need to synchronize with a possibly ongoing rebalance,  so we publish before the CAS and unpublish when done. 
+If publish or CAS fails then we retry (lines~\ref{line:doIfPresent publish}~and~\ref{line:doIfPresent retry}). 
+The operation returns \texttt{false} whenever it does not find the entry, or finds the entry but with $\bot$ as its handle index (line~\ref{line:doIfPresent hi is bot}), or CAS to $\bot$ is successful (line~\ref{line:doIfPresent final return false}).
+
+In \algvar{remove}, 
+if a non-deleted handle exists (case 1),  it also updates the handle, in this case, marking it as deleted by calling handle.remove (line~\ref{line:doIfPresent handle remove}), 
+and we say that the remove is \emph{successful}.
+This makes  other threads aware of the fact that the key has been removed, 
+%so there will be no further attempts to read its value, 
+which suffices for correctness.
+However, as an optimization, \algvar{remove} also performs a second task after marking the handle as deleted, namely, marking the appropriate entry's handle index as $\bot$. 
+Updating the entry serves two purposes:
+first, rebalance does not check whether a handle is deleted,
+so changing the handle index to $\bot$ is needed to allow garbage collection;
+second, updating the entry expedites other operations, which do not need to read the handle in order to see that it is deleted. 
+
+Thus, a successful  \algvar{remove}  calls  \algvar{finalizeRemove}, which  tries to CAS the handle index to $\bot$.
+We have to take care, however, in case the handle index had already changed, not to change it to $\bot$. 
+To this end,  \algvar{finalizeRemove} takes a parameter \algvar{prev} -- the handle  that \algvar{remove} marked as deleted. 
+If the entry no longer points to it, we do nothing (line \ref{line:finalizeRemove prev neq handle}).
+We save in \algvar{prev} the handle itself and not the handle index, to avoid an ABA problem, since after a rebalance, the handle index might remain the same but reference a different handle. 
+Since  \algvar{remove}  is linearized at the point where it marks the handle as deleted, it does not have to succeed in performing the CAS in   \algvar{finalizeRemove}.
+If CAS fails, this means that either some insertion operation reused this entry or another non-insertion operation  set the  index to $\bot$.
+
+If  \algvar{remove}  finds an already deleted handle (case 2), it cannot simply return, since by the time remove notices that the handle is deleted, the entry might point to another handle.
+Therefore, similarly to \algvar{computeIfPresent}, it makes sure that the key is removed by performing a successful CAS of the handle index to $\bot$ (line~\ref{line:doIfPresent cas}).
+In this case (case 2) it does not perform \algvar{finalizeRemove}, but rather retries if the CAS fails (line~\ref{line:doIfPresent retry}).
+Note the difference between the two cases: in case 1, we set the handle to deleted, and so changing the entry's handle index to $\bot$ is merely an optimization, and should only occur if the entry still points to the deleted handle. 
+In the second case, on the other hand, \algvar{remove} does not delete any handle, and so it \emph{must} make sure that the entry's handle index is indeed $\bot$ before returning. 
+
+
+\subsection{Linearization points}
+\label{sec:lp}
+
+In the supplementary material we show that Oak's operations (except for scans) are \emph{linearizable}~\cite{linearizability}; that is, every operation appears to take place atomically at some point (the linearization point, abbreviated \emph{l.p.}) between its invocation and response.
+We now list the linearization points.
+
+
+\newenvironment{desc}%
+  {\begin{description}%
+      \setlength{\partopsep}{0pt}%
+      \setlength{\topsep}{0pt}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0pt}}%
+  {\end{description}}
+
+\begin{description}
+
+\item[putIfAbsent] -- if it returns \texttt{true}, the l.p.\ is the successful CAS of handle index (line~\ref{line:cashandle}).
+Otherwise, the l.p.\ is when it finds a non-deleted handle
+% (reads $\algvar{handle.deleted}=\algvar{false}$) 
+(line~\ref{line:handle.deleted}).
+
+\item[put] -- if it inserts a new key, the l.p.\ is the successful CAS of handle index (line~\ref{line:cashandle}).
+Otherwise, 
+%put replaces the value of a key and
+ the l.p.\ is upon %when a non-deleted handle is found and there is 
+ a successful nested call to handle.put (line~\ref{line:handleput}).
+
+\item[putIfAbsentComputeIfPresent] -- if it inserts a new key, the l.p.\ is the successful CAS of handle index (line~\ref{line:cashandle}).
+Otherwise, 
+%it updates the value of a key and 
+the l.p.\ is upon 
+%when a non-deleted handle is found and there is 
+a successful nested call to handle.compute (line~\ref{line:handlecompute}).
+
+\item[computeIfPresent] -- if it returns \texttt{true}, the l.p.\ is 
+%when a non-deleted handle is found and there is 
+upon a successful nested call to handle.compute (line~\ref{line:doIfPresent handle compute return true}). Otherwise, 
+%computeIfPresent returns \texttt{false} and 
+the l.p.\ is when the entry is not found, or it is found but with $\bot$ as its handle index (line~\ref{line:doIfPresent hi is bot}), 
+or a successful CAS of handle index to $\bot$ (line~\ref{line:doIfPresent cas}).
+
+\item[remove] -- if it is successful, the l.p.\ is when 
+%a non-deleted handle is found and 
+a successful nested call to handle remove 
+%occurs, setting 
+sets the handle to deleted (line~\ref{line:doIfPresent handle remove}).
+Otherwise, 
+%it is not successful and 
+the l.p.\ is when the entry is not found, or handle index is $\bot$ (line~\ref{line:doIfPresent hi is bot}), or 
+%a deleted handle is found and 
+a successful CAS of handle index to $\bot$ occurs (line~\ref{line:doIfPresent cas}).
+
+\item[get] -- if it returns a handle, then the l.p.\ is the read of a non-deleted handle (line~\ref{line:get check deleted}).
+If it returns \textsc{null} 
+%there are two cases. If 
+and there is no relevant entry then the l.p.\ is when \algvar{lookUp} (line~\ref{line:lookup}) returns $\bot$, or when get reads that the handle index is $\bot$ (line~\ref{line:get ei}).
+Otherwise, \algvar{get} reads a deleted handle (line~\ref{line:get check deleted}). However, the l.p.\ cannot be the read of the \algvar{deleted} flag in the handle, since by that time, a new handle may have been inserted. 
+Instead, 
+%Therefore, if  \algvar{get} finds $\algvar{deleted}=\algvar{true}$, then
+the l.p.\ is the later between (1) the read of handle index by the same  \algvar{get} (line~\ref{line:get ei}) 
+and (2) immediately after the set of  $\algvar{deleted}=\algvar{true}$ by some  \algvar{remove} (note that exactly one \algvar{remove} set deleted to true).
+
+\end{description}
+

@@ -1,0 +1,159 @@
+
+\label{sec:model}
+
+\oak\/ is unique in offering a map interface for self-managed data. %, which it stores in internal buffers.
+This affects the programming model as it allows applications to  access data in \oak's buffers directly. 
+\Cref{ssec:managed-API} discusses the serialization of application objects into \emph{\oak\/ buffers}.
+\Cref{ssec:API}  presents 
+\oak's novel \emph{zero-copy API}, which reduces the need for serialization and deserialization (and hence copying).% of accessed keys and values. 
+
+
+\begin{table*}[htb]
+\setlength{\abovecaptionskip}{5pt}
+\setlength{\belowcaptionskip}{5pt}
+\begin{tabular}{ll} 
+{\bf ZeroCopyConcurrentNavigableMap} & {\bf (Legacy) ConcurrentNavigableMap}\\ 
+\hline
+\multicolumn{2}{c}{\emph{Queries -- get and scans}}\\
+OakRBuffer get(K) & V get(K)\\
+Set$\langle$OakRBuffer$\rangle$ keySet() 			 & Set$\langle$K$\rangle$ keySet()\\
+Set$\langle$OakRBuffer$\rangle$ valueSet()  			 & Set$\langle$V$\rangle$ valueSet()\\
+Set$\langle$OakRBuffer, OakRBuffer$\rangle$ entrySet() & Set$\langle$K, V$\rangle$ entrySet()\\
+\multicolumn{2}{c}{\emph{Updates}}\\
+void put(K, V) & V put(K, V)\\
+void remove(K) &  V remove(K)\\
+boolean putIfAbsent(K, V) & V putIfAbsent(K, V)\\
+boolean computeIfPresent(K, Function(OakWBuffer))	&  {\it non-atomic} V computeIfPresent(K, Function(K,V)) \\
+boolean putIfAbsentComputeIfPresent(K, V, Function(OakWBuffer)) & {\it non-atomic} V merge(K, V, Function(K,V)) \\
+\hline
+\end{tabular}
+\caption{\oak's zero-copy API versus the legacy ConcurrentNavigableMap API. 
+Key and value types are K and V, resp. 
+Get and scans return OakRBuffers instead of objects. Updates
+%Put, remove, and putIfAbsent 
+do not return the old value in order to avoid copying. 
+%The update methods  computeIfPresent and putIfAbsentComputeIfPresent  are atomic.
+}
+\label{alg:api}
+\end{table*}
+
+
+\remove{
+To convert objects to buffers and vice versa, Oak applications access \emph{Oak buffers} and provide  
+use \emph{serializers}, as 
+Second, concurrent access to Oak-resident values and the dynamic memory usage of such values are managed via the abstraction of \emph{handles}. Handles have pluggable concurrency control and memory management and are described 
+in \Cref{ssec:handles}.
+Finally, we introduce in \Cref{ssec:API} a novel  
+}
+
+\subsection{\oak\/ buffers and serialization}
+\label{ssec:managed-API}
+
+% A key consideration in the design of Oak is allowing keys and values to be kept in self-managed (off-heap) memory. 
+%Thus, 
+
+Oak keys and values are variable-sized. Keys are immutable, and values may be modified. 
+In contrast to Java data structures holding Java objects, Oak stores data in internal buffers. 
+To convert objects (both keys and values) to and from their \emph{serialized} forms, the user must implement 
+%the \algvar{OakSerializer} interfacegiven in Algorithm~\ref{alg:serialize}. This interface consists of 
+a (1) serializer, (2) deserializer, and (3) serialized size calculator. % (for variable-sized keys and values).  
+To allow efficient search over buffer-resident keys, the user is further required to provide 
+a {comparator}.
+
+Oak's insertions use the size calculator to deduce the amount of space to be allocated, then allocate space for the given object, 
+and finally invoke the serializer to write the object to the allocated space. 
+By using the user-provided serializer, we create the binary representation of the object directly into \oak's internal memory.  
+
+
+\remove{
+\begin{algorithm}
+\footnotesize
+%  // serializes the object
+%   // deserializes the given byte buffer
+%   // returns num of bytes needed for serializing the object
+\begin{verbatim}
+public interface OakSerializer<T> {
+  void serialize(T source, ByteBuffer targetBuffer);
+  T deserialize(ByteBuffer byteBuffer);
+  int calculateSize(T object);
+}
+public interface OakComparator<K> {
+  int compareKeys(K key1, K key2);
+  int compareSerializedKeys(ByteBuffer serializedKey1, 
+                            ByteBuffer serializedKey2);
+  int compareSerializedKeyAndKey(ByteBuffer serializedKey, 
+                                 K key);  
+}
+\end{verbatim}
+\caption{Interface for user-provided Oak serializer and comparator.}
+\label{alg:serialize}
+\end{algorithm}
+}
+
+
+%the \algvar{OakComparator} interface, also given in Algorithm~\ref{alg:serialize}. 
+%The comparator compares two keys, each of which may be provided either as a deserialized object or as a serialized buffer. 
+%It determines whether they are equal, and if not, which is bigger.
+
+%After key-value pairs are ingested,  
+{\oak\/ provides \algvar{OakRBuffer}  and \algvar{OakWBuffer} abstractions for internal readable and writable buffers. 
+These types are lightweight on-heap facades to off-heap storage, which provide the application with familiar managed object semantics. 
+For example, they may exist arbitrarily long and the memory behind them will not be reclaimed. Furthermore, user code can access 
+them without worrying about concurrent access. Since keys are immutable, they are always accessed through \algvar{OakRBuffer}s, 
+whereas values can be accessed both ways.}
+
+\remove{
+Internally kept keys and values may be accessed as  buffers of  types \algvar{OakRBuffer} and \algvar{OakWBuffer}, supporting the standard  API for read-only Java ByteBuffers and writable Java ByteBuffers, respectively.
+\algvar{OakWBuffer}s are accessed by user-provided lambda functions passed to Oak's  compute methods.  
+User code can access the buffers without worrying about concurrent access  or dynamic memory consumption.
+Oak buffer objects are intermediate (on-heap) representations of the underlying objects, 
+created on-demand by operations that need access to the key or value; they are ephemeral and cease to exist once the operation is completed.
+}
+ 
+%The buffer-based direct access to serialized keys and values reduces copying and deserialization of the underlying mappings. 
+ %In addition to the standard ByteBuffer API, Oak buffers manage concurrency control and dynamic memory allocation for their users. 
+%Thus, user functions can run computational steps on Oak-resident values with no concern of concurrency control or memory overflow and release.
+%To this end, Oak buffers use the abstraction of handles, as described in Section~\ref{ssec:handles} below.
+
+
+\subsection{Zero-copy API}
+\label{ssec:API}
+
+We introduce ZeroCopyConcurrentNavigableMap, \oak's ZC API.
+\Cref{alg:api}   compares it to the essential methods of the %JDK ConcurrentNavigableMap 
+legacy API using  a slightly simplified Java-like syntax, neglecting some technicalities 
+(e.g., the use of Collections instead of Sets in some cases). 
+%very similar to the real implementation.
+To use the ZC API, an application  creates a ConcurrentNavigableMap-compliant 
+\oak\/ map, and accesses 
+%its  ZC sibling interface 
+it through the \algvar{zc()} method, e.g., calling  \algvar{map.zc().get(key)} instead of the legacy  \algvar{map.get(key)}.
+ 
+The API is changed only in so far as to avoid copying. The  \algvar{get()} and  scans 
+(\algvar{keySet()}, \algvar{valueSet()}, and \algvar{entrySet()})  return \oak\ buffers instead of Java objects,
+while continuing to offer the same functionality. In particular, scans offer the Set interface
+with its  standard tools such as a stream API for mapreduce-style processing~\cite{JavaStream}.  Likewise, sub-range and reverse-order views 
+are provided by familiar \algvar{subMap()} and \algvar{descendingMap()} methods on Sets. 
+
+
+%The sets then support the standard \algvar{subMap} and  methods for range and descending iterators.
+
+The update methods 
+% \algvar{put()}, \algvar{putIfAbsent()} and \algvar{remove()}  
+differ from their legacy counterparts   
+in that they do not return the old value (in order to avoid  copying it). %,  which violates Oak's zero-copy design principle. 
+The last two -- \algvar{computeIfPresent()}  and  \algvar{putIfAbsentComputeIfPresent()} --  atomically update values in place. 
+Both take a user (lambda) function to apply to the \algvar{OakWBuffer}  of the value mapped to the given key.
+Unlike the legacy map, 
+\oak\ ensures that the lambda is executed atomically, exactly once, and extends the value's memory allocation if its code so requires.
+%Note also that unlike in ConcurrentNavigableMap, \oak's lambda function does not return the computed value to avoid copying.
+%Rather,  it performs the computation   in-place, so the newly computed value is  accessible in the map once it returns. 
+
+
+While all operations are atomic,  \algvar{get()} returns access to the same underlying memory buffer that %\algvar{compute} 
+other operations update in-place, while the granularity of Oak's concurrency control is at the level of individual method calls on that buffer
+(e.g., reading a single integer from it). Therefore,  buffer access methods may encounter different values -- 
+and even value deletions\footnote{\small{A  \algvar{get()} method  throws a  \algvar{ConcurrentModificationException}   in case the mapping is concurrently deleted.}} -- 
+when accessing a buffer %returned from the same \algvar{get} 
+multiple times. This is an inevitable consequence of avoiding copying.
+

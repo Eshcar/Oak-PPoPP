@@ -1,0 +1,205 @@
+%  KV-maps are important
+Concurrent ordered  \emph{key-value (KV-)maps}  are 
+an indispensable  part of today's programming toolkits. Doug Lee's ConcurrentSkipListMap \cite{JavaSkipList}, for instance, has been widely used for more than a decade. 
+Such maps are essential for building  real-time data storage, retrieval, and processing platforms including 
+in-memory~\cite{memcached} and persistent~\cite{Bigtable2008,hbase,Cassandra} KV-stores.
+%, as well as by search engines~\cite{elasticsearch}, analytics databases~\cite{Druid}, and many others. 
+%
+% They have to get bigger - removed because we don't scale the memory
+% The steady reduction in DRAM prices~\cite{dram-prices}  increases the industry's appetite for holding growing amounts of data in main memory. 
+Another notable use case is in-memory 
+analytics, whose market is projected to grow from \$1.26B in 2017 to \$3.85B in 2022~\cite{analytics-market}. For example, the Apache 
+Druid~\cite{Druid} analytics engine is adopted by 
+ Airbnb, Alibaba, eBay, Netflix, Paypal,   Verizon Media, and scores of others. 
+ 
+ % KV-maps are challenged by big data
+Today, many data platforms are implemented in managed programming languages like 
+Java~\cite{Druid,hbase,Cassandra,elasticsearch}.
+%, where KV-maps are challenged by the demand for big data.  
+%and cannot keep up with the increase in DRAM capacity. 
+Despite recent advances, \emph{garbage collection (GC)} algorithms struggle to scale with the volume of 
+managed (on-heap) memory, often leading to low utilization and unpredictable performance~\cite{GC}. 
+%With large heaps (16GB and above), GC incurs long pauses in execution that slow down applications, and frequently lead to 
+% Removed below because we also don't go beyond 32GB
+%For instance, Elasticsearch administrator guide recommends using at most a 32GB heap~\cite{elastic32GB}.
+This shortcoming has led a number of systems to adopt  home-grown {\em off-heap\/} memory allocators, e.g., Cassandra~\cite{off-heap-cassandra}, 
+Druid~\cite{Druid-off-heap}, and HBase~\cite{HBase-off-heap, accordion, HbaseOffheapWritePath}. Most of these  use cases, however, are limited 
+to immutable data and avoid the complexity of implementing  synchronization. 
+
+% Introducing Oak 
+In this paper, we address the demand for scalable in-memory  KV-maps in Java and similar languages. 
+We design and implement \oak\ -- \emph{Off-heap Allocated KV-map} -- an efficient  ordered concurrent KV-map 
+that self-manages its memory off-heap.  
+Our design emphasizes  (1) performance, (2) programming convenience, and (3) correctness under concurrency. 
+%We are not familiar with any previous data structure offloading memory from the managed memory heap while achieving these goals. 
+
+% ZC API 
+These objectives are facilitated by \oak's novel \emph{zero-copy} (ZC) API, which 
+allows applications to access and manipulate data directly in \oak's internal buffers, yet in a thread-safe way. 
+For backward compatibility, \oak\ also supports the (less efficient) legacy KV-map API (in JDK, 
+ConcurrentNavigableMap~\cite{JavaConcurrentNavigableMap}).
+Either way,
+\oak\ preserves the managed-memory programming experience through internal garbage collection.  
+We discuss our programming model  in \Cref{sec:model}. 
+
+% Algorithm and proof
+\oak\ achieves high   
+performance by (1) reduced copying, (2) efficient data organization both on- and off-heap, 
+and (3) lightweight synchronization. \oak\ further features a novel approach to expedite 
+descending scans, which are prevalent in analytics use cases. Data organization is the subject of 
+\Cref{sec:arch}, and the concurrent algorithm appears in \Cref{sec:alg}; we formally prove its 
+correctness in the supplementary material. 
+
+% Implementation 
+We have released a Java implementation of \oak\  as an off-the-shelf open-source 
+package under the Apache 2.0 License~\cite{OakOpenSource}.  
+% evaluation
+Its evaluation in \Cref{sec:eval}  shows
+%presents an evaluation of  this package using the  synchrobench~\cite{synchrobench} tool. \oak\ 
+ significant improvements over  ConcurrentSkipListMap, e.g.,  2x speeding up for puts and gets. 
+% While long ascending scans are \inred{slightly slower} with \oak, 
+\oak's descending scans are 10x faster than the state-of-the-art
+thanks to the built-in support for such scans. 
+In terms of memory utilization, \oak\ can ingest over 30\% more data within a given DRAM size. 
+
+% Use case
+Finally, \Cref{sec:druid} features a case study of integrating \oak\/ into Apache 
+Druid~\cite{Druid} -- a popular open-source real-time analytics database.   
+%the latter ingests high-throughput data streams into multi-gigabyte KV-maps and allows querying the data in
+%parallel with its ingestion. 
+We re-implement Druid's centerpiece incremental index component around \oak.
+This speeds up Druid's data ingestion by above 80\% and reduces the metadata space overhead by 50\%. 
+  
+We now describe \oak's key features and survey prior art. 
+
+\vspace{-10pt}
+\subsection{\oak's design}
+
+\paragraph{Off-heap allocation and GC.} 
+%One of 
+The principal motivation for Oak is offloading data from the managed-memory heap.
+% into internal memory.
+%Off-heap allocation counters undesirable phenomena introduced by GC, like unpredictable timing of GC cycles, 
+%which aggravates tail latencies and may even render the system unresponsive~\cite{GC}. 
+\oak\/ allocates key and value buffers within large off-heap memory pools. This alleviates the 
+%general-purpose 
+GC 
+performance overhead, as well as the memory overhead associated with the Java object layout.  
+{The internal memory reclamation policy is customizable, with a low-overhead default that serves
+big data systems well. %Self-managed memory 
+\oak\
+also supports fast estimation of its
+RAM footprint --  a common application requirement~\cite{HbaseSizeTracking}.}
+% \oak\/ supports variable-size keys and values. 
+% \oak\/ supports a pluggable internal GC mechanism that can be tuned to specific application scenarios. 
+%For example,  analytics applications predominantly ingest new data and do not need granular memory reuse. 
+%In contrast, transactional applications (e.g., publish-subscribe) permanently insert and remove data, and therefore benefit from off-heap GC.   
+
+For simplicity, \oak\/ manages its metadata, e.g., the search index, on-heap; note that metadata is typically
+small and dynamic, and Java's memory manager deals with it well.
+%rendering its management more challenging. 
+%Future optimizations might revise this design point and offload some of the metadata as well.  
+
+%This raises the question of granularity: if every object resides in its own buffer, then the GC overhead is still large, as is the potential for external fragmentation. 
+%Instead, we allocate large blocks for multiple objects and allow Java to perform GC at a coarse grain.  
+%, with Java GC at a coarse grain. 
+%This means that the reclamation of deleted keys may take a long time. 
+%3. Values are allocated off-heap, in large buffers, with home-grown GC. 
+
+% and serializing data to avoid Java's memory overhead for object headers. 
+
+% Oak supports both on-heap and off-heap keys and values via the same API; 
+% We are not familiar with previous data structures with this feature.
+
+\vspace{-10pt}
+\paragraph{Zero-copy API.} 
+% \oak\/ exposes separate programming models for mainstream and advanced users. 
+For backward compatibility, \oak\ exposes the legacy JDK8 ConcurrentNavigableMap API, where
+input and output parameters
+%(keys and values) 
+are Java objects. With off-heap storage, however, this interface is inefficient because it requires serialization and deserialization of objects in every query or update.  
+This is particularly costly in case keys and values are big, as is common in analytics applications. 
+%This is inherently inferior to reference retrieval with on-heap storage. 
+To mitigate this cost, \oak\ offers a novel 
+ZC API,  allowing the programmer  direct access to off-heap buffers, both for reading and for updating-in-place 
+via user-provided lambda functions. 
+%
+\oak's internal GC guarantees safety --  buffer space that might be 
+referenced from outside \oak\/ is not reclaimed. 
+
+\remove{
+The ZC interface is particularly important for big keys and values. In analytics applications like Druid, a typical value is a multi-kilobyte aggregate,   
+where a typical query accesses a few tens of bytes, and each value is updated multiple times. 
+}
+
+
+\paragraph{Linearizability.} 
+\oak\/ provides atomic semantics (linearizability) for traditional point access (get, put, remove) as well as  
+for in-situ updates (compute, put-if-absent, put-if-absent-compute-if-present). 
+Note that consistency is ensured at the level of user data, i.e., lambda functions are executed atomically.
+In contrast, Java's concurrent collections do not offer atomic update-in-place (e.g., its compute method is not atomic).
+Supporting atomic conditional updates alongside traditional 
+(unconditional) puts necessitated designing a new concurrent algorithm. We are not aware of any previous algorithm addressing this challenge. 
+
+\remove{
+To allow safe concurrent access to stored values without copying them, 
+\oak\/ introduces the abstraction of \emph{handles} -- an indirection that frees application programmers from the need to deal 
+with concurrency control. 
+}
+
+
+\paragraph{Efficient metadata organization.}
+Ordered map data structures like search trees and skiplists consist of many small objects (``nodes'') with indirection among them. 
+This induces penalties both on memory management -- due to fragmentation -- and on search time -- because of lack of locality. 
+Similarly to a number of recently suggested data structures~\cite{chunks,Braginsky-BTree,kiwi}, 
+\oak's metadata is organized in contiguous \emph{chunks}, which reduces the number of metadata objects and speeds up searches through locality of access. 
+This is challenging in the presence of variable-sized keys and values;  previous chunk-based data structures \cite{chunks,Braginsky-BTree,kiwi} 
+maintain fixed-size keys and values inline, without the additional indirection level required to support variable-sized data.
+
+\paragraph{Fast two-way scans.}
+Like ConcurrentSkipListMap, and as required by many applications, \oak\/ provides iterators to support (non-atomic) scans. 
+The scans are not atomic in the sense that the set of keys in the scanned range may change during the scan. 
+Supporting atomic scans would be more costly in time and space,  %\footnote{\inred{We also experimented with atomic scans and they were $\sim$25\% slower.}}, 
+and is rarely justified in analytics scenarios where results are inherently approximate.
+
+Although analytics require both ascending and descending range scans, existing concurrent data structure 
+%we know of 
+do not have built-in support 
+for the latter. Rather, descending scans are implemented as a sequence of gets.
+%by invoking a get for a smaller key after each scanned key. 
+We leverage \oak's chunk-based organization to expedite descending scans 
+without the complexity of managing a doubly-linked list. 
+%In our experiments, Oak's descending scans are up to \inred{6x} faster than ones using ConcurrentSkipListMap.
+
+\paragraph{Summary.} 
+All in all, \oak\/ is the first concurrent KV-map explicitly designed to address big-data demands, including off-heap memory management,
+zero copy API, in-place atomic updates optimized for variable-size keys and values, index locality for fast searches, and efficient descending scans.
+%We have created an initial prototype of Druid using Oak, with promising preliminary results. By using Oak, Druid  (the backbone for Oath's Flurry Analytics) can 
+%benefit from greater concurrency, off-heap data allocation, smaller memory overhead, and less GC. 
+
+
+\subsection{Related work}
+
+%\Idit{Read mapDB, VLDB paper on log-structured memory, update text below accordingly.}
+
+Substantial efforts have been dedicated to developing efficient concurrent ordered maps~\cite{JavaSkipList,rcu,kiwi,Braginsky-BTree,related_1,related_2,related_3,related_4,related_5,related_6,related_7,related_8,related_9,related_10,the-art-of,transactional-lib,chunks,related_11}. 
+However, most of these works do not implement functionalities such as update-in-place, conditional puts, and descending iterators. 
+Many of these are academic prototypes, which hold only an ordered key set and not key-value pairs~\cite{related_2,related_3,related_4,related_5,related_8,related_11}. 
+Moreover, the ones that do hold key-value pairs typically maintain fixed-size keys and values~\cite{kiwi,Braginsky-BTree,chunks} and do not support large, variable-size keys and values as Oak does. 
+
+Java collections such as ConcurrentSkipListMap~\cite{JavaSkipList} do support general objects as keys and values, and also implement the full ConcurrentNavigableMap API.
+Nevertheless, their compute is not necessarily atomic, their organization is not chunk-based and so searches do not benefit from locality, and their descending scans are slow
+ as we show in \Cref{sec:eval}.  
+%Note further that unlike \oak, Java's skiplist does not deal with memory allocation  -- it stores pre-allocated objects. % -- nor does it manage concurrent access to the objects it stores. 
+
+Chunk-based allocation is used in existing concurrent data structures~\cite{Braginsky-BTree,kiwi,chunks} but not with variable-size entities or off-heap allocation.
+It is also a common design pattern in  persistent (disk-resident) key-value storage.  
+\oak, in contrast, is memory-resident. %; it is designed for Druid-like systems, which separate persistent archiving from in-memory real-time analytics processing.
+
+Off-heap allocation is gaining popularity in various systems~\cite{off-heap-cassandra,off-heap-alibaba,accordion,HBase-off-heap,Druid-off-heap}.
+Yet {the only off-the-shelf \emph{data structure library} implementation that we are aware of is within the MapDB 
+open source package~\cite{MapDB}, which implements Sagiv's concurrent B$^*$-tree~\cite{Sagiv:1985}. We are 
+not aware of safety guarantees of this implementation wrt in-situ updates; it is also at least an order-of-magnitude slower than \oak~(\Cref{sec:eval}).}
+%we are not aware of any previous  that supports it.
+
+

@@ -1,0 +1,157 @@
+\documentclass[sigplan,10pt,review,anonymous]{acmart}
+
+\settopmatter{printfolios=true,printccs=false,printacmref=false}
+
+
+\acmConference[PPoPP'20]{PPoPP 2019: 25th ACM SIGPLAN Annual Symposium on Principles and Practice of Parallel Programming}{2020}{San Diego, CA, USA}
+\acmYear{2020}
+\acmISBN{} % \acmISBN{978-x-xxxx-xxxx-x/YY/MM}
+\acmDOI{} % \acmDOI{10.1145/nnnnnnn.nnnnnnn}
+\startPage{1}
+\setcopyright{none}
+\bibliographystyle{ACM-Reference-Format}
+
+%%%%%% PPoPP 2020: 10 pages + references, appendix not in paper but in anonymous supplamentary material
+
+\usepackage{microtype}
+\usepackage{epstopdf}
+\usepackage{epsfig}
+\usepackage{graphicx,subcaption}
+
+\epstopdfsetup{outdir=./}
+\usepackage{multicol}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+\usepackage{hyperref}
+\usepackage{cleveref}
+\crefformat{section}{\S#2#1#3}
+
+
+\algnewcommand{\algvar}{\texttt}
+\algnewcommand{\assign}{\leftarrow}
+\algnewcommand{\NULL}{\textsc{null}}
+\algnewcommand{\givenvalue}{\algvar{val}}
+\algnewcommand{\key}{\algvar{key}}
+\algnewcommand{\continue}{\textbf{continue}}
+\algnewcommand{\LeftComment}[1]{\Statex \(\triangleright\) #1}
+\newcommand{\csl}{Skiplist-OnHeap}
+\newcommand{\YoniList}{Skiplist-OffHeap}
+\newcommand{\II}{I$^2$}
+
+\newcommand{\inred}[1]{{\color{red}{#1}}}
+\newcommand{\remove}[1]{}
+\newcommand{\Idit}[1]{\inred{[Idit: #1]}}
+\newcommand{\oak}{Oak}
+
+\hyphenation{Con-current-SkipList-Map}
+\hyphenation{Oak-W-Buffer}
+
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{claim}[theorem]{Claim}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\begin{document}
+
+\title{Oak:  A Scalable Off-Heap Allocated Key-Value Map}
+
+\author{Hagar Meir}
+\affiliation{
+\institution{IBM Research, Haifa, Israel\thanks{Work done while interning at Yahoo Research.}} 
+}
+
+\author{Dmitry Basin}
+\affiliation{
+\institution{Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\author{Edward Bortnikov}
+\affiliation{
+\institution{Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\author{Anastasia Braginsky}
+\affiliation{
+\institution{Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\author{Yonatan Gottesman}
+\affiliation{
+\institution{Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\author{Idit Keidar}
+\affiliation{
+\institution{Viterbi Department of Electrical Engineering, Technion and Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\author{Eran Meir}
+\affiliation{
+\institution{Yahoo Research, Verizon Media, Haifa, Israel} 
+}
+
+\begin{abstract}
+ \input{abstract}
+\end{abstract}
+
+\remove{
+\begin{CCSXML}
+<ccs2012>
+<concept>
+<concept_id>10003752.10003809.10010031</concept_id>
+<concept_desc>Theory of computation~Data structures design and analysis</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+<concept>
+<concept_id>10003752.10003809.10011778</concept_id>
+<concept_desc>Theory of computation~Concurrent algorithms</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Theory of computation~Data structures design and analysis}
+\ccsdesc[500]{Theory of computation~Concurrent algorithms}
+
+\keywords{memory management, concurrent data structures, key-value maps}  %% \keywords are mandatory in final camera-ready submission
+}
+
+ \maketitle
+
+
+   \section{Introduction}
+   \input{intro}
+
+    \section{Programming Model}
+    \input{model}
+		
+   \section{Data Organization}
+   \label{sec:arch}
+    \input{arch}
+		
+    \section{Oak Algorithm}
+    \label{sec:alg}
+    \input{algorithm}
+      
+    \section{Evaluation}
+    \input{eval}
+
+   \section{Case Study: Druid}
+   \input{druid}
+
+    \section{Conclusion}
+    \input{conclusion}
+    
+    \newpage
+    \bibliography{references}
+  
+  \appendix
+    
+    \cleardoublepage
+   \section{ Supplementary Material -- Correctness}
+    \input{correctness}
+    
+\end{document}

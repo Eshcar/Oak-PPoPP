@@ -1,0 +1,19 @@
+Efficient ordered in-memory key-value (KV-)maps are paramount for the scalability of modern data platforms. In managed  
+languages like Java, KV-maps face unique challenges due to the high overhead of garbage collection (GC).
+
+We present \oak, a scalable concurrent KV-map for environments with managed memory. \oak\/ offloads data from the managed 
+ heap, thereby reducing GC overheads and improving memory utilization.
+An important consideration in this context is the programming model since a standard object-based API 
+entails moving data between the on- and off-heap spaces. 
+In order to avoid the cost associated with such movement, we introduce a novel {\em zero-copy\/} (ZC) API.
+% alongside  the traditional one. % (e.g., Java's ConcurrentNavigableMap).
+It 
+%allows concurrency among all map operations, offering 
+provides 
+atomic get, put, remove, and various conditional put operations such as \emph{compute} (in-situ update). 
+%and {\em put-if-absent}. 
+
+We have released an open-source Java version of \oak. 
+We further present a prototype \oak-based implementation of the internal multidimensional index in Apache Druid. 
+%-- a popular open-source in-memory real-time analytics system. 
+Our experiments show that Oak is often 2x faster than Java's state-of-the-art concurrent skiplist.

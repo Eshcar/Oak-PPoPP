@@ -1,0 +1,10 @@
+venv
+.vscode
+Oak.aux
+Oak.out
+Oak.pdf
+Oak.log
+Oak.bbl
+Oak.blg
+*.synctex
+Oak.synctex.gz
